@@ -48,9 +48,156 @@ namespace BitchlandPickupItemsFromVendingMachinesAndTrashPilesBepInEx
 
             enableThisMod = configEnableMe.Value;
 
-            Harmony.CreateAndPatchAll(typeof(BitchlandPickupItemsFromVendingMachinesAndTrashPilesBepInEx));
+            PatchAllHarmonyMethods();
 
             Logger.LogInfo($"Plugin BitchlandPickupItemsFromVendingMachinesAndTrashPilesBepInEx BepInEx is loaded!");
+        }
+        public static void PatchAllHarmonyMethods()
+        {
+            if (!enableThisMod)
+            {
+                return;
+            }
+
+            try
+            {
+                PatchHarmonyMethodUnity(typeof(int_VendingMachine), "Interact", "Interact_VendingMachine", true, false);
+                PatchHarmonyMethodUnity(typeof(int_SearchTrash), "Interact", "Interact_SearchTrash", true, false);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex.ToString());
+            }
+        }
+
+        public static void PatchHarmonyMethodUnity(Type originalClass, string originalMethodName, string patchedMethodName, bool usePrefix, bool usePostfix, Type[] parameters = null)
+        {
+            string uniqueId = "com.wolfitdm.BitchlandPickupItemsFromVendingMachinesAndTrashPilesBepInEx";
+            Type uniqueType = typeof(BitchlandPickupItemsFromVendingMachinesAndTrashPilesBepInEx);
+
+            // Create a new Harmony instance with a unique ID
+            var harmony = new Harmony(uniqueId);
+
+            if (originalClass == null)
+            {
+                Logger.LogInfo($"GetType originalClass == null");
+                return;
+            }
+
+            MethodInfo patched = null;
+
+            try
+            {
+                patched = AccessTools.Method(uniqueType, patchedMethodName);
+            }
+            catch (Exception ex)
+            {
+                patched = null;
+            }
+
+            if (patched == null)
+            {
+                Logger.LogInfo($"AccessTool.Method patched {patchedMethodName} == null");
+                return;
+
+            }
+
+            // Or apply patches manually
+            MethodInfo original = null;
+
+            try
+            {
+                if (parameters == null)
+                {
+                    original = AccessTools.Method(originalClass, originalMethodName);
+                }
+                else
+                {
+                    original = AccessTools.Method(originalClass, originalMethodName, parameters);
+                }
+            }
+            catch (AmbiguousMatchException ex)
+            {
+                Type[] nullParameters = new Type[] { };
+                try
+                {
+                    if (patched == null)
+                    {
+                        parameters = nullParameters;
+                    }
+
+                    ParameterInfo[] parameterInfos = patched.GetParameters();
+
+                    if (parameterInfos == null || parameterInfos.Length == 0)
+                    {
+                        parameters = nullParameters;
+                    }
+
+                    List<Type> parametersN = new List<Type>();
+
+                    for (int i = 0; i < parameterInfos.Length; i++)
+                    {
+                        ParameterInfo parameterInfo = parameterInfos[i];
+
+                        if (parameterInfo == null)
+                        {
+                            continue;
+                        }
+
+                        if (parameterInfo.Name == null)
+                        {
+                            continue;
+                        }
+
+                        if (parameterInfo.Name.StartsWith("__"))
+                        {
+                            continue;
+                        }
+
+                        Type type = parameterInfos[i].ParameterType;
+
+                        if (type == null)
+                        {
+                            continue;
+                        }
+
+                        parametersN.Add(type);
+                    }
+
+                    parameters = parametersN.ToArray();
+                }
+                catch (Exception ex2)
+                {
+                    parameters = nullParameters;
+                }
+
+                try
+                {
+                    original = AccessTools.Method(originalClass, originalMethodName, parameters);
+                }
+                catch (Exception ex2)
+                {
+                    original = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                original = null;
+            }
+
+            if (original == null)
+            {
+                Logger.LogInfo($"AccessTool.Method original {originalMethodName} == null");
+                return;
+            }
+
+            HarmonyMethod patchedMethod = new HarmonyMethod(patched);
+            var prefixMethod = usePrefix ? patchedMethod : null;
+            var postfixMethod = usePostfix ? patchedMethod : null;
+
+            harmony.Patch(original,
+                prefix: prefixMethod,
+                postfix: postfixMethod);
         }
 
         private static GameObject getItemByName(string name)
@@ -119,9 +266,6 @@ namespace BitchlandPickupItemsFromVendingMachinesAndTrashPilesBepInEx
                 person.CurrentBackpack.ThisStorage.AddItem(item);
             }
         }
-
-        [HarmonyPatch(typeof(int_VendingMachine), "Interact")]
-        [HarmonyPrefix] // call after the original method is called
         public static bool Interact_VendingMachine(Person person, object __instance)
         {
             if (!enableThisMod)
@@ -156,9 +300,6 @@ namespace BitchlandPickupItemsFromVendingMachinesAndTrashPilesBepInEx
 
             return false;
         }
-
-        [HarmonyPatch(typeof(int_SearchTrash), "Interact")]
-        [HarmonyPrefix] // call after the original method is called
         public static bool Interact_SearchTrash(Person person, object __instance)
         {
             if (!enableThisMod)
